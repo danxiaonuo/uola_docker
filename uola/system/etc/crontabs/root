@@ -1,0 +1,6 @@
+*/3 * * * * /usr/share/clash/clash-watchdog.sh
+*/1 * * * * /usr/share/clash/kill_watchdog.sh
+0 */12 * * * echo "" >/usr/share/clash/clash.txt >/dev/null 2>&1
+0 */3 * * * bash /usr/share/clash/update_all.sh >/usr/share/clash/clash.txt 2>&1 &
+0 */1 * * * bash /tools/ddns/dnspod_dns_ipv6.sh
+0 */1 * * * bash /tools/ddns/aly_dns_ipv6.sh

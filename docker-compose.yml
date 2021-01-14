@@ -1,0 +1,100 @@
+version: '3.9'
+services:
+
+  # 服务名
+  uola:
+    # 模拟一个伪终端
+    tty: true
+    # 打开标准输入,可以接受外部输入
+    stdin_open: true
+    # 指定容器中运行应用的用户名
+    user: root
+    # 主机名
+    hostname: uola
+    # 指定容器名称
+    container_name: uola
+    # 指定为镜像名称或镜像ID
+    image: danxiaonuo/uola:x86_64
+    # 覆盖容器启动后默认执行的命令
+    command: /sbin/init
+    # 允许容器中运行一些特权命令
+    privileged: true
+    # 指定容器退出后的重启策略为始终重启
+    restart: always
+    # 指定容器的内核能力(capacity)分配
+    cap_add:
+     - ALL
+    # 配置容器内核参数
+    sysctls:
+     - net.ipv4.tcp_ecn=1
+     - net.ipv4.tcp_ecn_fallback=1
+     - net.ipv4.tcp_congestion_control=bbrplus
+    # 数据卷所挂载路径设置
+    volumes:
+      # 系统配置
+      # 启动脚本
+      - ./uola/system/etc/rc.local:/etc/rc.local:rw,cached
+      # 任务计划
+      - ./uola/system/etc/crontabs/root:/etc/crontabs/root:rw,cached
+      # 系统内核
+      - ./uola/system/etc/sysctl.conf:/etc/sysctl.conf:rw,cached
+      # 网络配置
+      - ./uola/system/etc/config/network:/etc/config/network:rw,cached
+      # mwan3
+      - ./uola/system/etc/config/mwan3:/etc/config/mwan3:rw,cached
+      # IPV6路由
+      - ./uola/system/sbin/ipv6_check_route.sh:/sbin/ipv6_check_route.sh:rw,cached
+      # 工具脚本
+      - ./uola/tools:/tools:rw,cached
+      # dns
+      - ./uola/system/etc/resolv.conf:/etc/resolv.conf:rw,cached
+      # 应用设置
+      # clash
+      - ./uola/system/etc/config/clash:/etc/config/clash:rw,cached
+      - ./uola/app/clash/init.d/clash:/etc/init.d/clash:rw,cached
+      - ./uola/app/clash/clash:/etc/clash/clash:rw,cached
+      - ./uola/app/clash/dtun/clash:/etc/clash/dtun/clash:rw,cached
+      - ./uola/app/clash/Country.mmdb:/etc/clash/Country.mmdb:rw,cached
+      # 同步宿主机时区与时间
+      - /usr/share/zoneinfo:/usr/share/zoneinfo:ro,cached
+      - /etc/localtime:/etc/localtime:ro,cached
+      # 共享内核
+      #- /lib/modules:/lib/modules:ro,cached
+      #- /etc/sysctl.conf:/etc/sysctl.conf:ro,cached
+    # 指定设备映射关系
+    devices:
+     - /dev/net/tun
+    # 配置容器连接的网络
+    networks:
+      macvLan:
+        ipv4_address: 10.8.1.253
+    mac_address: 00:0C:2B:BC:BB:CC
+    # 指定容器的 ulimits 限制值
+    ulimits:
+      nproc: 65535
+      nofile:
+          soft: 65535
+          hard: 65535
+
+networks:
+  #macvWan:
+  #  driver: macvlan
+  #  enable_ipv6: true
+  #  driver_opts:
+  #    parent: ens192
+  #    macvlan_mode: bridge
+  #  ipam:
+  #    config:
+  #      - subnet: fe80::/64
+  macvLan:
+    driver: macvlan
+    enable_ipv6: true
+    driver_opts:
+      parent: bond0
+      macvlan_mode: bridge
+    ipam:
+      config:
+        - subnet: 2001::0/64
+          gateway: 2001::1
+        - subnet: 10.8.1.0/24
+          gateway: 10.8.1.1

@@ -1,0 +1,27 @@
+config interface 'loopback'
+	option ifname 'lo'
+	option proto 'static'
+	option ipaddr '127.0.0.1'
+	option netmask '255.0.0.0'
+
+config globals 'globals'
+	option ula_prefix 'da66::/48'
+	option packet_steering '1'
+
+config interface 'lan'
+	option ifname 'eth0'
+	option proto 'static'
+	option netmask '255.255.255.0'
+	option ip6assign '64'
+	option ip6hint '0'
+	option ipaddr '10.8.1.253'
+	option gateway '10.8.1.1'
+	option dns '10.8.1.1 da66::1'
+	option ip6ifaceid '::22'
+
+config interface 'lan_ipv6'
+	option ifname '@lan'
+	option proto 'dhcpv6'
+	option reqaddress 'try'
+	option reqprefix 'auto'
+

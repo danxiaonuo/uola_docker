@@ -1,0 +1,12 @@
+# Put your custom commands here that should be executed once
+# the system init finished. By default this file does nothing.
+
+# 系统初始化
+bash /tools/os_init.sh
+# ipv6自动检测
+# bash /sbin/ipv6_check.sh
+# ipv6路由自动检测
+# bash /sbin/ipv6_check_route.sh
+# smartdns自动检测
+bash /sbin/smartdns.sh
+exit 0
