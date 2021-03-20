@@ -1,3 +1,5 @@
+# 自动检测LAN口状况
+*/1 * * * * /bin/bash /sbin/net_status.sh
 */3 * * * * /usr/share/clash/clash-watchdog.sh
 */1 * * * * /usr/share/clash/kill_watchdog.sh
 0 */12 * * * echo "" >/usr/share/clash/clash.txt >/dev/null 2>&1

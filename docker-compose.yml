@@ -67,7 +67,7 @@ services:
     # 配置容器连接的网络
     networks:
       macvLan:
-        ipv4_address: 10.8.1.253
+        ipv4_address: ipv4地址(与路由器在同一网段,并且未必使用。)
     mac_address: 00:0C:2B:BC:BB:CC
     # 指定容器的 ulimits 限制值
     ulimits:
@@ -96,5 +96,5 @@ networks:
       config:
         - subnet: 2001::0/64
           gateway: 2001::1
-        - subnet: 10.8.1.0/24
-          gateway: 10.8.1.1
+        - subnet: ipv4网段地址
+          gateway: ipv4网关地址

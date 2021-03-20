@@ -35,8 +35,8 @@ TTL="600"
 ipv4=$(curl -s -m 3 --retry-delay 3 --retry 3 -k -4 --header 'cache-control: no-cache' --url https://api-ipv4.ip.sb/ip)
 ipv6=$(curl -s -m 3 --retry-delay 3 --retry 3 -k -6 --header 'cache-control: no-cache' --url https://api-ipv6.ip.sb/ip)
 # 获取DNS 解析记录
-ipv4_dns=$(dig gw.uola.iflyelf.com A +short 2>&1)
-ipv6_dns=$(dig gw.uola.iflyelf.com AAAA +short 2>&1)
+ipv4_dns=$(dig $Domain_Name A +short 2>&1)
+ipv6_dns=$(dig $Domain_Name AAAA +short 2>&1)
 
 # 前置函数
 urlencode() {
