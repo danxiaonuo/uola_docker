@@ -195,6 +195,12 @@ rules() {
 	PROXY_FWMARK="0x162"
 	PROXY_ROUTE_TABLE="0x162"
 	PROXY_BYPASS_USER="root"
+	TUN_DEVICE_NAME="utun"
+	TUN_USER="root"
+	TUN_ADDRESS="198.18.0.1/16"
+	CREATE_AP_ADDR="10.8.1.0/24"
+	PROXY_PORT=$(uci get clash.config.redir_port 2>/dev/null)
+	SSH_PORT=22
 	dnsforwader=$(uci get clash.config.dnsforwader 2>/dev/null)
 
 	redir_host=$(egrep '^ {0,}enhanced-mode' /etc/clash/config.yaml | grep enhanced-mode: | awk -F ': ' '{print $2}')
@@ -215,17 +221,28 @@ rules() {
 		fi
 	fi
 
+	# IPv4 环回地址(排除一些局域网地址)
 	ipset create localnetwork hash:net
-	ipset add localnetwork 127.0.0.0/8
+	ipset add localnetwork 0.0.0.0/8
 	ipset add localnetwork 10.0.0.0/8
+	ipset add localnetwork 127.0.0.0/8
 	ipset add localnetwork 169.254.0.0/16
+	ipset add localnetwork 172.16.0.0/12
 	ipset add localnetwork 192.168.0.0/16
 	ipset add localnetwork 224.0.0.0/4
 	ipset add localnetwork 240.0.0.0/4
-	ipset add localnetwork 172.16.0.0/12
+	# IPv6 环回地址
+	ipset create localnetwork6 hash:net -6
+	ipset add localnetwork6 fe80::/10
+
 	if [ -n "$wan" ]; then
 		for wan_ip4s in $wan; do
 			ipset add localnetwork "$wan_ip4s" 2>/dev/null
+		done
+	fi
+	if [ -n "${ip6}" ]; then
+		for lan_ip6s in $ip6; do
+			ipset add localnetwork6 "$lan_ip6s" 2>/dev/null
 		done
 	fi
 	sh /usr/share/clash/chinaipset.sh >/dev/null 2>&1
@@ -277,6 +294,7 @@ rules() {
 		iptables -t nat -I PREROUTING -p tcp -d 223.6.6.6 -j REDIRECT --to-ports "${redir_port}"
 		iptables -t nat -A PREROUTING -p tcp -j clash
 
+		# 对带有 fwmark 的流量走 TUN_ROUTE_TABLE 路由表
 		ip rule add fwmark "$PROXY_FWMARK" table "$PROXY_ROUTE_TABLE"
 		ip route add local 0.0.0.0/0 dev lo table "$PROXY_ROUTE_TABLE"
 		iptables -t mangle -N clash
@@ -302,16 +320,32 @@ rules() {
 		fi
 
 		if [ "${ipv6}" == "true" ]; then
-			ip6tables -t nat -N clash
+			# IPv6 环回地址
+			ipset create localnetwork6 hash:net -6
+			ipset add localnetwork6 fe80::/10
+			# 给 TUN 设备增加路由
+			ip -6 route replace default dev "$TUN_DEVICE_NAME" table "$PROXY_ROUTE_TABLE"
+			# 对带有 fwmark 的流量走 PROXY_ROUTE_TABLE 路由表
+			ip -6 rule add fwmark "$PROXY_FWMARK" table "$PROXY_ROUTE_TABLE"
+			# IPv6 Clash 链
+			# 创建 clash6 链
+			ip6tables -t mangle -N clash6
+			# 绕过指定用户
+			ip6tables -t mangle -A clash6 -m owner --uid-owner "$PROXY_BYPASS_USER" -j RETURN
+			# 绕过本地地址
+			ip6tables -t mangle -A clash6 -m set --match-set localnetwork6 dst -j RETURN
+			# 给 TCP 连接打上标记
+			ip6tables -t mangle -A clash6 -p tcp -j MARK --set-mark "$PROXY_FWMARK"
+			# 给 UDP 连接打上标记
+			ip6tables -t mangle -A clash6 -p udp -j MARK --set-mark "$PROXY_FWMARK"
+			ip6tables -t mangle -A clash6 -p udp -j RETURN
+			#ip6tables -t mangle -I PREROUTING -m set ! --match-set localnetwork6 dst -j MARK --set-mark "$PROXY_FWMARK" # 在 PREROUTING 给所有非本地流量打上标记
+
 			if [ -n "${ip6}" ]; then
 				for lan_ip6s in $ip6; do
-					ip6tables -t nat -A clash -d "$lan_ip6s" -j RETURN 2>/dev/null
+					ipset add localnetwork6 "$lan_ip6s" 2>/dev/null
 				done
 			fi
-			ip6tables -t nat -A clash -p tcp -j REDIRECT --to-ports "$proxy_port"
-			ip6tables -t nat -I PREROUTING -p tcp -d 2400:3200::1 -j REDIRECT --to-ports "${redir_port}"
-		    ip6tables -t nat -I PREROUTING -p tcp -d 2400:3200:baba::1 -j REDIRECT --to-ports "${redir_port}"
-			ip6tables -t nat -A PREROUTING -p tcp -j clash
 		fi
 
 	elif
@@ -325,29 +359,91 @@ rules() {
 
 		TUN_DEVICE=$(egrep '^ {0,}device-url:' /etc/clash/config.yaml | grep device-url: | awk -F '//' '{print $2}')
 		if [ -z $TUN_DEVICE ]; then
-			TUN_DEVICE_NAME="clash0"
+			TUN_DEVICE_NAME="utun"
 		else
 			TUN_DEVICE_NAME=$TUN_DEVICE
 		fi
 
 		if [ "${core}" -eq 3 ]; then
-			ip tuntap add user root mode tun $TUN_DEVICE_NAME
+			# 增加 Tun网卡
+			ip tuntap add "$TUN_DEVICE" mode tun user $TUN_USER
+			# 启动 Tun
 			ip link set $TUN_DEVICE_NAME up
+			# 将对应 IP 段分配给 TUN
+			ip address replace "$TUN_ADDRESS" dev "$TUN_DEVICE_NAME"
+			# 给 TUN 设备增加路由
 			ip route replace default dev $TUN_DEVICE_NAME table "$PROXY_ROUTE_TABLE"
+			# 给 TUN 设备增加路由
+			ip -6 route replace default dev "$TUN_DEVICE_NAME" table "$PROXY_ROUTE_TABLE"
 		elif [ "${core}" -eq 4 ]; then
 			TUN_WAIT=0
 			while ([ -n "$(pidof clash)" ] && [ -z "$(ip route list | grep utun)" ] && [ "$TUN_WAIT" -le 3 ]); do
 				TUN_WAIT=$(expr "$TUN_WAIT" + 1)
 				sleep 2
 			done
-			ip route replace default dev utun table "$PROXY_ROUTE_TABLE"
+			# 增加 Tun网卡
+			ip tuntap add "$TUN_DEVICE" mode tun user $TUN_USER
+			# 启动 Tun
+			ip link set $TUN_DEVICE_NAME up
+			# 将对应 IP 段分配给 TUN
+			ip address replace "$TUN_ADDRESS" dev "$TUN_DEVICE_NAME"
+			# 给 TUN 设备增加路由
+			ip route replace default dev $TUN_DEVICE_NAME table "$PROXY_ROUTE_TABLE"
+			# 给 TUN 设备增加路由
+			ip -6 route replace default dev "$TUN_DEVICE_NAME" table "$PROXY_ROUTE_TABLE"
 		fi
 
+		# 对带有 fwmark 的流量走 TUN_ROUTE_TABLE 路由表
 		ip rule add fwmark "$PROXY_FWMARK" table "$PROXY_ROUTE_TABLE"
+		# 对带有 fwmark 的流量走 PROXY_ROUTE_TABLE 路由表
+		ip -6 rule add fwmark "$PROXY_FWMARK" table "$PROXY_ROUTE_TABLE"
+		# 排除SSH端口
+		iptables -t nat -A PREROUTING -p tcp --dport $SSH_PORT -j ACCEPT
+		# 创建 clash 链
 		iptables -t mangle -N clash
-		iptables -t mangle -F clash
+		# 绕过指定用户
+		iptables -t mangle -A clash -m owner --uid-owner "$PROXY_BYPASS_USER" -j RETURN
+		# 将目标为对应 IP 段的流量打上标记
+		iptables -t mangle -A clash -d "$TUN_ADDRESS" -j MARK --set-mark "$PROXY_FWMARK"
+		# 绕过 create_ap 地址
+		iptables -t mangle -A clash -d "$CREATE_AP_ADDR" -j RETURN
+		# 绕过广播地址
+		iptables -t mangle -A clash -m addrtype --dst-type BROADCAST -j RETURN
+		# 绕过本地地址
 		iptables -t mangle -A clash -m set --match-set localnetwork dst -j RETURN
-		iptables -t mangle -A clash -m set --match-set china dst -j RETURN
+		# 给 TCP 连接打上标记
+		iptables -t mangle -A clash -p tcp -j MARK --set-mark "$PROXY_FWMARK"
+		# 给 UDP 连接打上标记
+		#iptables -t mangle -A clash -p udp -j MARK --set-mark "$PROXY_FWMARK"
+		iptables -t mangle -A clash -p udp -j RETURN
+
+		# IPv6 Clash 链
+		# 创建 clash6 链
+		ip6tables -t mangle -N clash6
+		# 绕过指定用户
+		ip6tables -t mangle -A clash6 -m owner --uid-owner "$PROXY_BYPASS_USER" -j RETURN
+		# 绕过本地地址
+		ip6tables -t mangle -A clash6 -m set --match-set localnetwork6 dst -j RETURN
+		# 给 TCP 连接打上标记
+		ip6tables -t mangle -A clash6 -p tcp -j MARK --set-mark "$PROXY_FWMARK"
+		# 给 UDP 连接打上标记
+		#ip6tables -t mangle -A clash6 -p udp -j MARK --set-mark "$PROXY_FWMARK"
+		ip6tables -t mangle -A clash6 -p udp -j RETURN
+		
+		# IPv4 出口使用 clash 链
+		iptables -t mangle -I OUTPUT -j clash
+		# 在 PREROUTING 给所有非本地流量打上标记
+		#iptables -t mangle -I PREROUTING -m set ! --match-set localnetwork dst -j MARK --set-mark "$PROXY_FWMARK"
+
+		# IPv6 出口使用 clash 链
+		ip6tables -t mangle -I OUTPUT -j clash6
+		# 在 PREROUTING 给所有非本地流量打上标记
+		#ip6tables -t mangle -I PREROUTING -m set ! --match-set localnetwork6 dst -j MARK --set-mark "$PROXY_FWMARK"
+
+		#iptables -t nat -A PREROUTING -p tcp -j REDIRECT --to-ports $PROXY_PORT
+		# REJECT 对应 IP 的 Output
+		#iptables -t filter -I OUTPUT -d "$TUN_ADDRESS" -j REJECT
+
 		if [ "${fake_ip}" == "fake-ip" ]; then
 			iptables -t mangle -A clash -d 198.18.0.0/16 -j MARK --set-mark "$PROXY_FWMARK"
 		fi
@@ -658,13 +754,14 @@ remove_mark() {
 	dns_port=$(grep "^ \{0,\}listen:" $CONFIG_YAML | awk -F ':' '{print $3}' 2>/dev/null)
 	PROXY_FWMARK="0x162" 2>/dev/null
 	PROXY_ROUTE_TABLE="0x162" 2>/dev/null
+	TUN_DEVICE_NAME="utun" 2>/dev/null
 
 	ip rule del fwmark "$PROXY_FWMARK" table "$PROXY_ROUTE_TABLE" >/dev/null 2>&1
 	ip route del local 0.0.0.0/0 dev lo table "$PROXY_ROUTE_TABLE" >/dev/null 2>&1
 
 	TUN_DEVICE=$(egrep '^ {0,}device-url:' /etc/clash/config.yaml | grep device-url: | awk -F '//' '{print $2}')
 	if [ -z $TUN_DEVICE ]; then
-		TUN_DEVICE_NAME="clash0"
+		TUN_DEVICE_NAME="utun"
 	else
 		TUN_DEVICE_NAME=$TUN_DEVICE
 	fi
@@ -673,9 +770,14 @@ remove_mark() {
 		ip tuntap del $TUN_DEVICE_NAME mode tun 2>/dev/null
 		ip route del default dev $TUN_DEVICE_NAME table "$PROXY_ROUTE_TABLE" 2>/dev/null
 	fi
-	ip route del default dev utun table "$PROXY_ROUTE_TABLE" >/dev/null 2>&1
+	ip link set dev $TUN_DEVICE_NAME down 2>/dev/null
+	ip tuntap del $TUN_DEVICE_NAME mode tun 2>/dev/null
+	ip route del default dev $TUN_DEVICE_NAME table "$PROXY_ROUTE_TABLE" 2>/dev/null
+	ip route del default dev $TUN_DEVICE_NAME table "$PROXY_ROUTE_TABLE" >/dev/null 2>&1
+	ip -6 route del default dev $TUN_DEVICE_NAME table "$PROXY_ROUTE_TABLE" >/dev/null 2>&1
 	#ip rule del fwmark "$PROXY_FWMARK" table "$PROXY_ROUTE_TABLE" 2>/dev/null
 	ip rule del fwmark "$PROXY_FWMARK" table "$PROXY_ROUTE_TABLE" >/dev/null 2>&1
+	ip -6 rule del fwmark "$PROXY_FWMARK" table "$PROXY_ROUTE_TABLE" >/dev/null 2>&1
 
 	mangle=$(iptables -nvL OUTPUT -t mangle | sed 1,2d | sed -n '/clash/=' | sort -r)
 	for mangles in $mangle; do
@@ -705,7 +807,9 @@ remove_mark() {
 	fi
 
 	iptables -t mangle -F clash 2>/dev/null
+	ip6tables -t mangle -F clash6 2>/dev/null
 	iptables -t mangle -X clash 2>/dev/null
+	ip6tables -t mangle -X clash6 2>/dev/null
 
 	iptables -t nat -F clash_output >/dev/null 2>&1
 	iptables -t nat -X clash_output >/dev/null 2>&1
@@ -760,6 +864,7 @@ remove_mark() {
 	done
 
 	ipset destroy localnetwork 2>/dev/null
+	ipset destroy localnetwork6 2>/dev/null
 
 	nat_indexs=$(iptables -nvL PREROUTING -t nat | sed 1,2d | sed -n '/clash/=' | sort -r)
 	for nat_index in $nat_indexs; do
@@ -767,8 +872,10 @@ remove_mark() {
 		iptables -t nat -F clash >/dev/null 2>&1
 		iptables -t nat -X clash >/dev/null 2>&1
 		iptables -t mangle -F clash >/dev/null 2>&1
+		ip6tables -t mangle -F clash6 >/dev/null 2>&1
 		iptables -t mangle -D PREROUTING -p udp -j clash >/dev/null 2>&1
 		iptables -t mangle -X clash >/dev/null 2>&1
+		ip6tables -t mangle -X clash6 >/dev/null 2>&1
 	done
 
 	nat=$(iptables -nvL PREROUTING -t nat | sed 1,2d | sed -n '/tcp dpt:53/=' | sort -r)
@@ -883,6 +990,8 @@ stop() {
 	fi
 	/etc/init.d/firewall restart >/dev/null 2>&1
 	/etc/init.d/dnsmasq restart >/dev/null 2>&1
+	/sbin/smartdns.sh >/dev/null 2>&1
+	/etc/init.d/smartdns restart >/dev/null 2>&1
 	#===========================================================================================================================
 }
 
