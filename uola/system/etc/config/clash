@@ -33,8 +33,6 @@ config clash 'config'
 	option enable_ipv6 'true'
 	option config_name 'Clash-speed'
 	option clash_url 'https://cdn.onlysing.com/clash/Clash-free.yaml'
-	option interf '1'
-	option interf_name 'eth0'
 	option use_config '/usr/share/clash/config/sub/Clash-free.yaml'
 	option enable '1'
 
