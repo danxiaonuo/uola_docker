@@ -63,3 +63,15 @@ config dnsservers
 	option ser_address '127.0.0.1'
 	option ser_port '6553'
 	option enabled '0'
+	
+config dnshijack
+	option enabled '1'
+	option type 'tcp://'
+	option ip '8.8.8.8'
+	option port '53'
+
+config dnshijack
+	option enabled '1'
+	option type 'tcp://'
+	option ip '8.8.8.8'
+	option port '53'
