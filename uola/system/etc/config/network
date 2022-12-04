@@ -9,7 +9,7 @@ config globals 'globals'
 	option packet_steering '1'
 
 config interface 'lan'
-	option ifname 'eth0'
+	option device 'eth0'
 	option proto 'static'
 	option netmask '255.255.255.0'
 	option ip6assign '64'
@@ -20,8 +20,7 @@ config interface 'lan'
 	option ip6ifaceid 'ipv6后缀地址'
 
 config interface 'lan_ipv6'
-	option ifname '@lan'
+	option device '@lan'
 	option proto 'dhcpv6'
 	option reqaddress 'try'
 	option reqprefix 'auto'
-
