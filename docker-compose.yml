@@ -75,7 +75,7 @@ services:
 networks:
   macvLan:
     driver: macvlan
-    enable_ipv6: true
+    enable_ipv6: false
     driver_opts:
       parent: 宿主机接口名称(eth0)
       macvlan_mode: bridge
