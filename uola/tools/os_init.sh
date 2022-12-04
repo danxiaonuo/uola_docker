@@ -2,8 +2,11 @@
 #==============================================#
 # 设置 network
 uci -q delete network.lan.type > /dev/null 2>&1
-uci set network.lan.ip6assign='64'
-uci set network.lan.ip6hint='0'
+uci -q del network.lan.ip6assign > /dev/null 2>&1
+uci -q del network.lan.ip6hint > /dev/null 2>&1
+uci -q del network.lan.ip6class > /dev/null 2>&1
+uci -q del network.lan.ip6ifaceid > /dev/null 2>&1
+uci -q del network.globals.ula_prefix > /dev/null 2>&1
 uci set network.lan.ipaddr=${ipv4_ipaddr}
 uci set network.lan.netmask=${ipv4_netmask}
 uci set network.lan.gateway=${ipv4_gateway}
