@@ -36,6 +36,8 @@ services:
       - ./uola/system/etc/rc.local:/etc/rc.local:rw,cached
       # 任务计划
       - ./uola/system/etc/crontabs/root:/etc/crontabs/root:rw,cached
+      # dns
+      - ./uola/system/etc/resolv.conf:/etc/resolv.conf:rw,cached
       # 工具脚本
       - ./uola/tools:/tools:rw,cached
       # 应用设置
