@@ -36,22 +36,11 @@ services:
       - ./uola/system/etc/rc.local:/etc/rc.local:rw,cached
       # 任务计划
       - ./uola/system/etc/crontabs/root:/etc/crontabs/root:rw,cached
-      # 系统内核
-      - ./uola/system/etc/sysctl.conf:/etc/sysctl.conf:rw,cached
-      # 网络配置
-      - ./uola/system/etc/config/network:/etc/config/network:rw,cached
-      # mwan3
-      - ./uola/system/etc/config/mwan3:/etc/config/mwan3:rw,cached
-      # IPV6路由
-      - ./uola/system/sbin/ipv6_check_route.sh:/sbin/ipv6_check_route.sh:rw,cached
       # 工具脚本
       - ./uola/tools:/tools:rw,cached
-      # dns
-      - ./uola/system/etc/resolv.conf:/etc/resolv.conf:rw,cached
       # 应用设置
       # clash
       - ./uola/system/etc/config/clash:/etc/config/clash:rw,cached
-      - ./uola/app/clash/init.d/clash:/etc/init.d/clash:rw,cached
       - ./uola/app/clash/clash:/etc/clash/clash:rw,cached
       - ./uola/app/clash/dtun/clash:/etc/clash/dtun/clash:rw,cached
       - ./uola/app/clash/Country.mmdb:/etc/clash/Country.mmdb:rw,cached
@@ -61,6 +50,13 @@ services:
       # 共享内核
       #- /lib/modules:/lib/modules:ro,cached
       #- /etc/sysctl.conf:/etc/sysctl.conf:ro,cached
+    environment:
+      # ipv4地址
+      - ipv4_ipaddr=ipv4地址(与路由器在同一网段,并且未必使用。)
+      # ipv4掩码
+      - ipv4_netmask=255.255.255.0
+      # ipv4网关地址
+      - ipv4_gateway=ipv4网关地址
     # 指定设备映射关系
     devices:
      - /dev/net/tun
@@ -77,24 +73,13 @@ services:
           hard: 65535
 
 networks:
-  #macvWan:
-  #  driver: macvlan
-  #  enable_ipv6: true
-  #  driver_opts:
-  #    parent: ens192
-  #    macvlan_mode: bridge
-  #  ipam:
-  #    config:
-  #      - subnet: fe80::/64
   macvLan:
     driver: macvlan
     enable_ipv6: true
     driver_opts:
-      parent: bond0
+      parent: 宿主机接口名称(eth0)
       macvlan_mode: bridge
     ipam:
       config:
-        - subnet: 2001::0/64
-          gateway: 2001::1
         - subnet: ipv4网段地址
           gateway: ipv4网关地址

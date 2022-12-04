@@ -6,7 +6,7 @@ bash /tools/os_init.sh
 # ipv6自动检测
 # bash /sbin/ipv6_check.sh
 # ipv6路由自动检测
-bash /sbin/ipv6_check_route.sh
+# bash /sbin/ipv6_check_route.sh
 # smartdns自动检测
 bash /sbin/smartdns.sh
 # 状态检测脚本
