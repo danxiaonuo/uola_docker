@@ -16,6 +16,9 @@ uci set network.lan_ipv6.proto='dhcpv6'
 uci set network.lan_ipv6.reqaddress='try'
 uci set network.lan_ipv6.reqprefix='auto'
 uci -q delete network.lan.dns
+uci add_list network.lan.dns='127.0.0.1'
+uci add_list network.lan.dns='::1'
+uci add_list network.lan.dns_search='lan'
 uci set network.lan.device='eth0'
 uci add_list network.lan.ip6class='local'
 uci -q delete network.@device[0].ports
